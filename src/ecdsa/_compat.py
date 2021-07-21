@@ -3,6 +3,7 @@ Common functions for providing cross-python version compatibility.
 """
 import sys
 import re
+import binascii
 from six import integer_types
 
 
@@ -15,7 +16,6 @@ def str_idx_as_int(string, index):
 
 
 if sys.version_info < (3, 0):  # pragma: no branch
-    import binascii
     import platform
 
     def normalise_bytes(buffer_object):
@@ -59,6 +59,12 @@ if sys.version_info < (3, 0):  # pragma: no branch
 
     def b2a_hex(val):
         return binascii.b2a_hex(compat26_str(val))
+
+    def a2b_hex(val):
+        try:
+            return bytearray(binascii.a2b_hex(val))
+        except Exception as e:
+            raise ValueError("base16 error: %s" % e)
 
     def bytes_to_int(val, byteorder):
         """Convert bytes to an int."""
@@ -106,6 +112,12 @@ else:
     def remove_whitespace(text):
         """Removes all whitespace from passed in string"""
         return re.sub(r"\s+", "", text, flags=re.UNICODE)
+
+    def a2b_hex(val):
+        try:
+            return bytearray(binascii.a2b_hex(bytearray(val, "ascii")))
+        except Exception as e:
+            raise ValueError("base16 error: %s" % e)
 
     # pylint: disable=invalid-name
     # pylint is stupid here and deson't notice it's a function, not
