@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover
     HC_PRESENT = False
 from .numbertheory import (
     SquareRootError,
+    JacobiError,
     factorization,
     gcd,
     lcm,
@@ -88,7 +89,7 @@ def test_square_root_mod_prime_for_2():
 
 
 def test_square_root_mod_prime_for_small_prime():
-    root = square_root_mod_prime(98 ** 2 % 101, 101)
+    root = square_root_mod_prime(98**2 % 101, 101)
     assert root * root % 101 == 9
 
 
@@ -108,11 +109,35 @@ def test_square_root_mod_prime_for_p_congruent_5_large_d():
     assert root * root % p == 4
 
 
+class TestSquareRootModPrime(unittest.TestCase):
+    def test_power_of_2_p(self):
+        with self.assertRaises(JacobiError):
+            square_root_mod_prime(12, 32)
+
+    def test_no_square(self):
+        with self.assertRaises(SquareRootError) as e:
+            square_root_mod_prime(12, 31)
+
+        self.assertIn("no square root", str(e.exception))
+
+    def test_non_prime(self):
+        with self.assertRaises(SquareRootError) as e:
+            square_root_mod_prime(12, 33)
+
+        self.assertIn("p is not prime", str(e.exception))
+
+    def test_non_prime_with_negative(self):
+        with self.assertRaises(SquareRootError) as e:
+            square_root_mod_prime(697 - 1, 697)
+
+        self.assertIn("p is not prime", str(e.exception))
+
+
 @st.composite
 def st_two_nums_rel_prime(draw):
     # 521-bit is the biggest curve we operate on, use 1024 for a bit
     # of breathing space
-    mod = draw(st.integers(min_value=2, max_value=2 ** 1024))
+    mod = draw(st.integers(min_value=2, max_value=2**1024))
     num = draw(
         st.integers(min_value=1, max_value=mod - 1).filter(
             lambda x: gcd(x, mod) == 1
@@ -134,7 +159,7 @@ def st_primes(draw, *args, **kwargs):
 
 @st.composite
 def st_num_square_prime(draw):
-    prime = draw(st_primes(max_value=2 ** 1024))
+    prime = draw(st_primes(max_value=2**1024))
     num = draw(st.integers(min_value=0, max_value=1 + prime // 2))
     sq = num * num % prime
     return sq, prime
@@ -146,7 +171,7 @@ def st_comp_with_com_fac(draw):
     Strategy that returns lists of numbers, all having a common factor.
     """
     primes = draw(
-        st.lists(st_primes(max_value=2 ** 512), min_size=1, max_size=10)
+        st.lists(st_primes(max_value=2**512), min_size=1, max_size=10)
     )
     # select random prime(s) that will make the common factor of composites
     com_fac_primes = draw(
@@ -157,7 +182,7 @@ def st_comp_with_com_fac(draw):
     # select at most 20 lists (returned numbers),
     # each having at most 30 primes (factors) including none (then the number
     # will be 1)
-    comp_primes = draw(
+    comp_primes = draw(  # pragma: no branch
         st.integers(min_value=1, max_value=20).flatmap(
             lambda n: st.lists(
                 st.lists(st.sampled_from(primes), max_size=30),
@@ -177,7 +202,7 @@ def st_comp_no_com_fac(draw):
     """
     primes = draw(
         st.lists(
-            st_primes(max_value=2 ** 512), min_size=2, max_size=10, unique=True
+            st_primes(max_value=2**512), min_size=2, max_size=10, unique=True
         )
     )
     # first select the primes that will create the uncommon factor
@@ -200,7 +225,7 @@ def st_comp_no_com_fac(draw):
 
     # select at most 20 lists, each having at most 30 primes
     # selected from the leftover_primes list
-    number_primes = draw(
+    number_primes = draw(  # pragma: no branch
         st.integers(min_value=1, max_value=20).flatmap(
             lambda n: st.lists(
                 st.lists(st.sampled_from(leftover_primes), max_size=30),
@@ -246,21 +271,21 @@ class TestIsPrime(unittest.TestCase):
 
     def test_medium_prime_1(self):
         # nextPrime[2^256]
-        assert is_prime(2 ** 256 + 0x129)
+        assert is_prime(2**256 + 0x129)
 
     def test_medium_prime_2(self):
         # nextPrime(2^256+0x129)
-        assert is_prime(2 ** 256 + 0x12D)
+        assert is_prime(2**256 + 0x12D)
 
     def test_medium_trivial_composite(self):
-        assert not is_prime(2 ** 256 + 0x130)
+        assert not is_prime(2**256 + 0x130)
 
     def test_medium_non_trivial_composite(self):
-        assert not is_prime(2 ** 256 + 0x12F)
+        assert not is_prime(2**256 + 0x12F)
 
     def test_large_prime(self):
         # nextPrime[2^2048]
-        assert is_prime(2 ** 2048 + 0x3D5)
+        assert is_prime(2**2048 + 0x3D5)
 
 
 class TestNumbertheory(unittest.TestCase):
@@ -297,7 +322,7 @@ class TestNumbertheory(unittest.TestCase):
 
     @given(
         st.lists(
-            st.integers(min_value=1, max_value=2 ** 8192),
+            st.integers(min_value=1, max_value=2**8192),
             min_size=1,
             max_size=20,
         )
@@ -315,7 +340,7 @@ class TestNumbertheory(unittest.TestCase):
 
     @given(
         st.lists(
-            st.integers(min_value=1, max_value=2 ** 8192),
+            st.integers(min_value=1, max_value=2**8192),
             min_size=1,
             max_size=20,
         )
@@ -340,9 +365,9 @@ class TestNumbertheory(unittest.TestCase):
         assert calc * calc % prime == square
 
     @settings(**HYP_SETTINGS)
-    @given(st.integers(min_value=1, max_value=10 ** 12))
+    @given(st.integers(min_value=1, max_value=10**12))
     @example(265399 * 1526929)
-    @example(373297 ** 2 * 553991)
+    @example(373297**2 * 553991)
     def test_factorization(self, num):
         factors = factorization(num)
         mult = 1

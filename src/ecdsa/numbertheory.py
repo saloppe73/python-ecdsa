@@ -43,6 +43,10 @@ class Error(Exception):
     pass
 
 
+class JacobiError(Error):
+    pass
+
+
 class SquareRootError(Error):
     pass
 
@@ -154,8 +158,10 @@ def jacobi(a, n):
     # table printed in HAC, and by extensive use in calculating
     # modular square roots.
 
-    assert n >= 3
-    assert n % 2 == 1
+    if not n >= 3:
+        raise JacobiError("n must be larger than 2")
+    if not n % 2 == 1:
+        raise JacobiError("n must be odd")
     a = a % n
     if a == 0:
         return 0
@@ -202,9 +208,8 @@ def square_root_mod_prime(a, p):
         d = pow(a, (p - 1) // 4, p)
         if d == 1:
             return pow(a, (p + 3) // 8, p)
-        if d == p - 1:
-            return (2 * a * pow(4 * a, (p - 5) // 8, p)) % p
-        raise RuntimeError("Shouldn't get here.")
+        assert d == p - 1
+        return (2 * a * pow(4 * a, (p - 5) // 8, p)) % p
 
     if PY2:
         # xrange on python2 can take integers representable as C long only
@@ -215,7 +220,8 @@ def square_root_mod_prime(a, p):
         if jacobi(b * b - 4 * a, p) == -1:
             f = (a, -b, 1)
             ff = polynomial_exp_mod((0, 1), (p + 1) // 2, f, p)
-            assert ff[1] == 0
+            if ff[1]:
+                raise SquareRootError("p is not prime")
             return ff[0]
     raise RuntimeError("No b found.")
 
@@ -230,7 +236,6 @@ if GMPY2:  # pragma: no branch
         if a == 0:  # pragma: no branch
             return 0
         return powmod(a, -1, m)
-
 
 elif GMPY:  # pragma: no branch
 
@@ -253,7 +258,6 @@ elif GMPY:  # pragma: no branch
 
         return lm % m
 
-
 elif sys.version_info >= (3, 8):  # pragma: no branch
 
     def inverse_mod(a, m):
@@ -261,7 +265,6 @@ elif sys.version_info >= (3, 8):  # pragma: no branch
         if a == 0:  # pragma: no branch
             return 0
         return pow(a, -1, m)
-
 
 else:  # pragma: no branch
 

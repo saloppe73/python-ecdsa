@@ -13,6 +13,14 @@ except ImportError:  # pragma: no cover
         "sha384",
         "sha512",
     ]
+# skip algorithms broken by change to OpenSSL 3.0 and early versions
+# of hashlib that list algorithms that require the legacy provider to work
+# https://bugs.python.org/issue38820
+algorithms_available = [
+    i
+    for i in algorithms_available
+    if i not in ("mdc2", "md2", "md4", "whirlpool", "ripemd160")
+]
 from functools import partial
 import pytest
 import sys
@@ -103,6 +111,7 @@ def st_fuzzed_sig(draw, keys_and_sigs):
     note("Remove bytes: {0}".format(to_remove))
 
     # decide which bytes of the original signature should be changed
+    xors = None
     if sig:  # pragma: no branch
         xors = draw(
             st.dictionaries(
@@ -227,7 +236,7 @@ def st_der_bit_string(draw, *args, **kwargs):
     if data:
         unused = draw(st.integers(min_value=0, max_value=7))
         data = bytearray(data)
-        data[-1] &= -(2 ** unused)
+        data[-1] &= -(2**unused)
         data = bytes(data)
     else:
         unused = 0
@@ -258,9 +267,9 @@ def st_der_oid(draw):
     if first < 2:
         second = draw(st.integers(min_value=0, max_value=39))
     else:
-        second = draw(st.integers(min_value=0, max_value=2 ** 512))
+        second = draw(st.integers(min_value=0, max_value=2**512))
     rest = draw(
-        st.lists(st.integers(min_value=0, max_value=2 ** 512), max_size=50)
+        st.lists(st.integers(min_value=0, max_value=2**512), max_size=50)
     )
     return encode_oid(first, second, *rest)
 
@@ -273,22 +282,20 @@ def st_der():
     of a valid DER structure, sequence of valid DER objects or a constructed
     encoding of any of the above.
     """
-    return st.recursive(
+    return st.recursive(  # pragma: no branch
         st.just(b"")
-        | st_der_integer(max_value=2 ** 4096)
-        | st_der_bit_string(max_size=1024 ** 2)
-        | st_der_octet_string(max_size=1024 ** 2)
+        | st_der_integer(max_value=2**4096)
+        | st_der_bit_string(max_size=1024**2)
+        | st_der_octet_string(max_size=1024**2)
         | st_der_null()
         | st_der_oid(),
-        lambda children: st.builds(
-            lambda x: encode_octet_string(x), st.one_of(children)
-        )
+        lambda children: st.builds(encode_octet_string, st.one_of(children))
         | st.builds(lambda x: encode_bitstring(x, 0), st.one_of(children))
         | st.builds(
             lambda x: encode_sequence(*x), st.lists(children, max_size=200)
         )
         | st.builds(
-            lambda tag, x: encode_constructed(tag, x),
+            encode_constructed,
             st.integers(min_value=0, max_value=0x3F),
             st.one_of(children),
         ),
@@ -307,7 +314,7 @@ def test_random_der_as_signature(params, der):
 
 
 @settings(**params)
-@given(st.sampled_from(keys_and_sigs), st.binary(max_size=1024 ** 2))
+@given(st.sampled_from(keys_and_sigs), st.binary(max_size=1024**2))
 @example(
     keys_and_sigs[0], encode_sequence(encode_integer(0), encode_integer(0))
 )
@@ -343,7 +350,11 @@ byte string.
 
 
 keys_and_string_sigs += [
-    (name, verifying_key, sig,)
+    (
+        name,
+        verifying_key,
+        sig,
+    )
     for name, verifying_key, sig in keys_and_sigs
     if isinstance(verifying_key.curve.curve, CurveEdTw)
 ]

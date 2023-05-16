@@ -18,44 +18,41 @@ jobs:
             os: ubuntu-latest
             container: centos:6
             python-version: 2.6
+          - name: py3.10 with ossl3.0
+            os: ubuntu-latest
+            container: ubuntu:22.04
+            python-version: "3.10"
+            tox-env: py310
           - name: py2.7
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 2.7
             tox-env: py27
           - name: py2.7 with old gmpy
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 2.7
             tox-env: py27_old_gmpy
           - name: py2.7 with old gmpy2
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 2.7
             tox-env: py27_old_gmpy2
           - name: py2.7 with old six
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 2.7
             tox-env: py27_old_six
           - name: py2.7 with gmpy
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 2.7
             tox-env: gmpypy27
           - name: py2.7 with gmpy2
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 2.7
             tox-env: gmpy2py27
-          - name: py3.3
-            os: ubuntu-18.04
-            python-version: 3.3
-            tox-env: py33
-          - name: py3.4
-            os: ubuntu-18.04
-            python-version: 3.4
-            tox-env: py34
           - name: py3.5
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 3.5
             tox-env: py35
           - name: py3.6
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 3.6
             tox-env: py36
           - name: py3.7
@@ -82,11 +79,14 @@ jobs:
             os: ubuntu-latest
             python-version: '3.10'
             tox-env: gmpy2py310
-          # Python 3.11a3 segfaults when running the test suite so skip it for now
-          #- name: py3.11
-          #  os: ubuntu-latest
-          #  python-version: '3.11.0-alpha.3'
-          #  tox-env: py311
+          - name: py3.11
+            os: ubuntu-latest
+            python-version: '3.11'
+            tox-env: py311
+          - name: py3.12
+            os: ubuntu-latest
+            python-version: '3.12.0-alpha.5'
+            tox-env: py312
           - name: pypy
             os: ubuntu-latest
             python-version: pypy-2.7
@@ -97,7 +97,7 @@ jobs:
             tox-env: pypy3
           # special configurations
           - name: py2.7 with instrumental
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             python-version: 2.7
             opt-deps: ['instrumental']
           - name: code checks
@@ -115,7 +115,7 @@ jobs:
         with:
           fetch-depth: 50
       - name: Ensure dependencies on CentOS
-        if: ${{ matrix.container }}
+        if: ${{ matrix.container == 'centos:6' }}
         run: |
           ls /etc/yum.repos.d/
           cat /etc/yum.repos.d/CentOS-Base.repo
@@ -144,6 +144,14 @@ jobs:
           yum clean all
           yum repolist all
           yum install -y git make python curl gcc libffi-devel python-devel glibc-devel openssl-devel wget
+      - name: Ensure dependencies on Ubuntu 22.04
+        if: ${{ matrix.container == 'ubuntu:22.04' }}
+        run: |
+          apt-get update
+          apt-get install -y git make python-is-python3 python3 curl wget python3-distutils python3-pip
+      - name: workaround git failures with py3.10
+        run: |
+          git config --global --add safe.directory /__w/python-ecdsa/python-ecdsa
       - name: Verify git status
         run: |
           git status
@@ -282,6 +290,19 @@ jobs:
           instrumental -f .instrumental.cov -s
           # just log the values when merging
           instrumental -f .instrumental.cov -s | python diff-instrumental.py
+          echo "COND_COV=$(instrumental -f .instrumental.cov -s | python diff-instrumental.py --raw)" >> $GITHUB_ENV
+      - name: Create condition coverage badge
+        uses: schneegans/dynamic-badges-action@v1.4.0
+        if: ${{ contains(matrix.opt-deps, 'instrumental') && !github.event.pull_request }}
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 9b6ca1f3410207fbeca785a178781651
+          filename: python-ecdsa-condition-coverage.json
+          label: condition coverage
+          message: ${{ env.COND_COV }}%
+          valColorRange: ${{ env.COND_COV }}
+          maxColorRange: 100
+          minColorRange: 0
       - name: Publish coverage to Coveralls
         if: ${{ !matrix.opt-deps && matrix.tox-env != 'codechecks' }}
         env:

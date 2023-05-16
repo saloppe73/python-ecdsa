@@ -50,7 +50,7 @@ class TestJacobi(unittest.TestCase):
         p_a = PointJacobi.from_affine(generator_256)
         p_b = PointJacobi.from_affine(generator_224)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError):  # pragma: no branch
             p_a + p_b
 
     def test_compare_different_curves(self):
@@ -202,7 +202,7 @@ class TestJacobi(unittest.TestCase):
     @settings(max_examples=10)
     @given(
         st.integers(
-            min_value=0, max_value=int(generator_brainpoolp160r1.order())
+            min_value=0, max_value=int(generator_brainpoolp160r1.order() - 1)
         )
     )
     def test_multiplications(self, mul):
@@ -217,7 +217,7 @@ class TestJacobi(unittest.TestCase):
     @settings(max_examples=10)
     @given(
         st.integers(
-            min_value=0, max_value=int(generator_brainpoolp160r1.order())
+            min_value=0, max_value=int(generator_brainpoolp160r1.order() - 1)
         )
     )
     @example(0)
@@ -235,10 +235,10 @@ class TestJacobi(unittest.TestCase):
     @settings(max_examples=10)
     @given(
         st.integers(
-            min_value=1, max_value=int(generator_brainpoolp160r1.order())
+            min_value=1, max_value=int(generator_brainpoolp160r1.order() - 1)
         ),
         st.integers(
-            min_value=1, max_value=int(generator_brainpoolp160r1.order())
+            min_value=1, max_value=int(generator_brainpoolp160r1.order() - 1)
         ),
     )
     @example(3, 3)
@@ -254,10 +254,10 @@ class TestJacobi(unittest.TestCase):
     @settings(max_examples=10)
     @given(
         st.integers(
-            min_value=1, max_value=int(generator_brainpoolp160r1.order())
+            min_value=1, max_value=int(generator_brainpoolp160r1.order() - 1)
         ),
         st.integers(
-            min_value=1, max_value=int(generator_brainpoolp160r1.order())
+            min_value=1, max_value=int(generator_brainpoolp160r1.order() - 1)
         ),
         st.integers(min_value=1, max_value=int(curve_brainpoolp160r1.p() - 1)),
     )
@@ -286,10 +286,10 @@ class TestJacobi(unittest.TestCase):
     @settings(max_examples=10)
     @given(
         st.integers(
-            min_value=1, max_value=int(generator_brainpoolp160r1.order())
+            min_value=1, max_value=int(generator_brainpoolp160r1.order() - 1)
         ),
         st.integers(
-            min_value=1, max_value=int(generator_brainpoolp160r1.order())
+            min_value=1, max_value=int(generator_brainpoolp160r1.order() - 1)
         ),
         st.integers(min_value=1, max_value=int(curve_brainpoolp160r1.p() - 1)),
     )
@@ -333,14 +333,14 @@ class TestJacobi(unittest.TestCase):
         z1 = 13
         x = PointJacobi(
             curve_brainpoolp160r1,
-            a.x() * z1 ** 2 % p,
-            a.y() * z1 ** 3 % p,
+            a.x() * z1**2 % p,
+            a.y() * z1**3 % p,
             z1,
         )
         y = PointJacobi(
             curve_brainpoolp160r1,
-            a.x() * z1 ** 2 % p,
-            a.y() * z1 ** 3 % p,
+            a.x() * z1**2 % p,
+            a.y() * z1**3 % p,
             z1,
         )
 
@@ -351,10 +351,10 @@ class TestJacobi(unittest.TestCase):
     @settings(max_examples=14)
     @given(
         st.integers(
-            min_value=1, max_value=int(generator_brainpoolp160r1.order())
+            min_value=1, max_value=int(generator_brainpoolp160r1.order() - 1)
         ),
         st.integers(
-            min_value=1, max_value=int(generator_brainpoolp160r1.order())
+            min_value=1, max_value=int(generator_brainpoolp160r1.order() - 1)
         ),
         st.lists(
             st.integers(
@@ -407,15 +407,15 @@ class TestJacobi(unittest.TestCase):
         z1 = 13
         x = PointJacobi(
             curve_brainpoolp160r1,
-            a.x() * z1 ** 2 % p,
-            a.y() * z1 ** 3 % p,
+            a.x() * z1**2 % p,
+            a.y() * z1**3 % p,
             z1,
         )
         z2 = 29
         y = PointJacobi(
             curve_brainpoolp160r1,
-            a.x() * z2 ** 2 % p,
-            a.y() * z2 ** 3 % p,
+            a.x() * z2**2 % p,
+            a.y() * z2**3 % p,
             z2,
         )
 
@@ -558,8 +558,12 @@ class TestJacobi(unittest.TestCase):
         self.assertEqual(pickle.loads(pickle.dumps(pj)), pj)
 
     @settings(**NO_OLD_SETTINGS)
+    @pytest.mark.skipif(
+        platform.python_implementation() == "PyPy",
+        reason="threading on PyPy breaks coverage",
+    )
     @given(st.integers(min_value=1, max_value=10))
-    def test_multithreading(self, thread_num):
+    def test_multithreading(self, thread_num):  # pragma: no cover
         # ensure that generator's precomputation table is filled
         generator_112r2 * 2
 
@@ -592,10 +596,12 @@ class TestJacobi(unittest.TestCase):
         )
 
     @pytest.mark.skipif(
-        platform.system() == "Windows",
-        reason="there are no signals on Windows",
+        platform.system() == "Windows"
+        or platform.python_implementation() == "PyPy",
+        reason="there are no signals on Windows, and threading breaks coverage"
+        " on PyPy",
     )
-    def test_multithreading_with_interrupts(self):
+    def test_multithreading_with_interrupts(self):  # pragma: no cover
         thread_num = 10
         # ensure that generator's precomputation table is filled
         generator_112r2 * 2

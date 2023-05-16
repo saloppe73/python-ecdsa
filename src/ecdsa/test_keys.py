@@ -336,6 +336,9 @@ class TestVerifyingKeyFromDer(unittest.TestCase):
 
         vk = VerifyingKey.from_pem(vk_pem)
 
+        self.assertIsInstance(vk.curve, Curve)
+        self.assertIs(vk.curve, Ed25519)
+
         vk_str = (
             b"\x23\x00\x50\xd0\xd6\x64\x22\x28\x8e\xe3\x55\x89\x7e\x6e\x41\x57"
             b"\x8d\xae\xde\x44\x26\xee\x56\x27\xbc\x85\xe6\x0b\x2f\x2a\xcb\x65"
@@ -399,6 +402,9 @@ class TestVerifyingKeyFromDer(unittest.TestCase):
         )
 
         vk = VerifyingKey.from_pem(pem_str)
+
+        self.assertIsInstance(vk.curve, Curve)
+        self.assertIs(vk.curve, Ed448)
 
         vk_str = (
             b"\x79\x0b\x5e\xb5\x2b\xbb\x08\xc1\x33\x13\xe5\xd6\x07\x5d\x01\x83"
@@ -688,7 +694,9 @@ class TestTrivialCurve(unittest.TestCase):
         cls.toy_curve = Curve("toy_p8", curve, gen, (1, 2, 0))
 
         cls.sk = SigningKey.from_secret_exponent(
-            140, cls.toy_curve, hashfunc=hashlib.sha1,
+            140,
+            cls.toy_curve,
+            hashfunc=hashlib.sha1,
         )
 
     def test_generator_sanity(self):
@@ -761,8 +769,8 @@ assert isinstance(sig_strings[0], bytes)
 verifiers = []
 for modifier, fun in [
     ("bytes", lambda x: x),
-    ("bytes memoryview", lambda x: buffer(x)),
-    ("bytearray", lambda x: bytearray(x)),
+    ("bytes memoryview", buffer),
+    ("bytearray", bytearray),
     ("bytearray memoryview", lambda x: buffer(bytearray(x))),
     ("array.array of bytes", lambda x: array.array("B", x)),
     ("array.array of bytes memoryview", lambda x: buffer(array.array("B", x))),
@@ -907,7 +915,10 @@ def test_SigningKey_with_unlikely_value():
 def test_SigningKey_with_custom_curve_old_point():
     generator = generator_brainpoolp160r1
     generator = Point(
-        generator.curve(), generator.x(), generator.y(), generator.order(),
+        generator.curve(),
+        generator.x(),
+        generator.y(),
+        generator.order(),
     )
 
     curve = Curve(

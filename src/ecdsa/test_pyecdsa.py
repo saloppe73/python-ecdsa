@@ -10,7 +10,6 @@ import shutil
 import subprocess
 import pytest
 from binascii import hexlify, unhexlify
-from hashlib import sha1, sha256, sha384, sha512
 import hashlib
 from functools import partial
 
@@ -21,8 +20,14 @@ from six import b, print_, binary_type
 from .keys import SigningKey, VerifyingKey
 from .keys import BadSignatureError, MalformedPointError, BadDigestError
 from . import util
-from .util import sigencode_der, sigencode_strings
-from .util import sigdecode_der, sigdecode_strings
+from .util import (
+    sigencode_der,
+    sigencode_strings,
+    sigencode_strings_canonize,
+    sigencode_string_canonize,
+    sigencode_der_canonize,
+)
+from .util import sigdecode_der, sigdecode_strings, sigdecode_string
 from .util import number_to_string, encoded_oid_ecPublicKey, MalformedSignature
 from .curves import Curve, UnknownCurveError
 from .curves import (
@@ -43,6 +48,8 @@ from .curves import (
     BRAINPOOLP320r1,
     BRAINPOOLP384r1,
     BRAINPOOLP512r1,
+    Ed25519,
+    Ed448,
     curves,
 )
 from .ecdsa import (
@@ -95,11 +102,16 @@ class ECDSA(unittest.TestCase):
         data = b("blahblah")
         secexp = int("9d0219792467d7d37b4d43298a7d0c05", 16)
 
-        priv = SigningKey.from_secret_exponent(secexp, SECP256k1, sha256)
+        priv = SigningKey.from_secret_exponent(
+            secexp, SECP256k1, hashlib.sha256
+        )
         pub = priv.get_verifying_key()
 
         k = rfc6979.generate_k(
-            SECP256k1.generator.order(), secexp, sha256, sha256(data).digest()
+            SECP256k1.generator.order(),
+            secexp,
+            hashlib.sha256,
+            hashlib.sha256(data).digest(),
         )
 
         sig1 = priv.sign(data, k=k)
@@ -108,7 +120,7 @@ class ECDSA(unittest.TestCase):
         sig2 = priv.sign(data, k=k)
         self.assertTrue(pub.verify(sig2, data))
 
-        sig3 = priv.sign_deterministic(data, sha256)
+        sig3 = priv.sign_deterministic(data, hashlib.sha256)
         self.assertTrue(pub.verify(sig3, data))
 
         self.assertEqual(sig1, sig2)
@@ -445,6 +457,78 @@ class ECDSA(unittest.TestCase):
         self.assertEqual(type(sig_der), binary_type)
         self.assertTrue(pub1.verify(sig_der, data, sigdecode=sigdecode_der))
 
+    def test_sigencode_string_canonize_no_change(self):
+        r = 12
+        s = 400
+        order = SECP112r1.order
+
+        new_r, new_s = sigdecode_string(
+            sigencode_string_canonize(r, s, order), order
+        )
+
+        self.assertEqual(r, new_r)
+        self.assertEqual(s, new_s)
+
+    def test_sigencode_string_canonize(self):
+        r = 12
+        order = SECP112r1.order
+        s = order - 10
+
+        new_r, new_s = sigdecode_string(
+            sigencode_string_canonize(r, s, order), order
+        )
+
+        self.assertEqual(r, new_r)
+        self.assertEqual(order - s, new_s)
+
+    def test_sigencode_strings_canonize_no_change(self):
+        r = 12
+        s = 400
+        order = SECP112r1.order
+
+        new_r, new_s = sigdecode_strings(
+            sigencode_strings_canonize(r, s, order), order
+        )
+
+        self.assertEqual(r, new_r)
+        self.assertEqual(s, new_s)
+
+    def test_sigencode_strings_canonize(self):
+        r = 12
+        order = SECP112r1.order
+        s = order - 10
+
+        new_r, new_s = sigdecode_strings(
+            sigencode_strings_canonize(r, s, order), order
+        )
+
+        self.assertEqual(r, new_r)
+        self.assertEqual(order - s, new_s)
+
+    def test_sigencode_der_canonize_no_change(self):
+        r = 13
+        s = 200
+        order = SECP112r1.order
+
+        new_r, new_s = sigdecode_der(
+            sigencode_der_canonize(r, s, order), order
+        )
+
+        self.assertEqual(r, new_r)
+        self.assertEqual(s, new_s)
+
+    def test_sigencode_der_canonize(self):
+        r = 13
+        order = SECP112r1.order
+        s = order - 14
+
+        new_r, new_s = sigdecode_der(
+            sigencode_der_canonize(r, s, order), order
+        )
+
+        self.assertEqual(r, new_r)
+        self.assertEqual(order - s, new_s)
+
     def test_sig_decode_strings_with_invalid_count(self):
         with self.assertRaises(MalformedSignature):
             sigdecode_strings([b("one"), b("two"), b("three")], 0xFF)
@@ -599,27 +683,29 @@ class ECDSA(unittest.TestCase):
             sk.sign_digest(b("\xff") * 64)
 
     def test_hashfunc(self):
-        sk = SigningKey.generate(curve=NIST256p, hashfunc=sha256)
+        sk = SigningKey.generate(curve=NIST256p, hashfunc=hashlib.sha256)
         data = b("security level is 128 bits")
         sig = sk.sign(data)
         vk = VerifyingKey.from_string(
-            sk.get_verifying_key().to_string(), curve=NIST256p, hashfunc=sha256
+            sk.get_verifying_key().to_string(),
+            curve=NIST256p,
+            hashfunc=hashlib.sha256,
         )
         self.assertTrue(vk.verify(sig, data))
 
         sk2 = SigningKey.generate(curve=NIST256p)
-        sig2 = sk2.sign(data, hashfunc=sha256)
+        sig2 = sk2.sign(data, hashfunc=hashlib.sha256)
         vk2 = VerifyingKey.from_string(
             sk2.get_verifying_key().to_string(),
             curve=NIST256p,
-            hashfunc=sha256,
+            hashfunc=hashlib.sha256,
         )
         self.assertTrue(vk2.verify(sig2, data))
 
         vk3 = VerifyingKey.from_string(
             sk.get_verifying_key().to_string(), curve=NIST256p
         )
-        self.assertTrue(vk3.verify(sig, data, hashfunc=sha256))
+        self.assertTrue(vk3.verify(sig, data, hashfunc=hashlib.sha256))
 
     def test_public_key_recovery(self):
         # Create keys
@@ -658,7 +744,7 @@ class ECDSA(unittest.TestCase):
         # Create keys
         curve = BRAINPOOLP160r1
 
-        sk = SigningKey.generate(curve=curve, hashfunc=sha256)
+        sk = SigningKey.generate(curve=curve, hashfunc=hashlib.sha256)
         vk = sk.get_verifying_key()
 
         # Sign a message
@@ -667,7 +753,11 @@ class ECDSA(unittest.TestCase):
 
         # Recover verifying keys
         recovered_vks = VerifyingKey.from_public_key_recovery(
-            signature, data, curve, hashfunc=sha256, allow_truncate=True
+            signature,
+            data,
+            curve,
+            hashfunc=hashlib.sha256,
+            allow_truncate=True,
         )
 
         # Test if each pk is valid
@@ -677,7 +767,7 @@ class ECDSA(unittest.TestCase):
 
             # Test if properties are equal
             self.assertEqual(vk.curve, recovered_vk.curve)
-            self.assertEqual(sha256, recovered_vk.default_hashfunc)
+            self.assertEqual(hashlib.sha256, recovered_vk.default_hashfunc)
 
         # Test if original vk is the list of recovered keys
         self.assertIn(
@@ -1354,6 +1444,118 @@ class OpenSSL(unittest.TestCase):
             % mdarg
         )
 
+    OPENSSL_SUPPORTED_TYPES = set()
+    try:
+        if "-rawin" in run_openssl("pkeyutl -help"):
+            OPENSSL_SUPPORTED_TYPES = set(  # pragma: no branch
+                c.lower()
+                for c in ("ED25519", "ED448")
+                if c in run_openssl("list -public-key-methods")
+            )
+    except SubprocessError:  # pragma: no cover
+        pass
+
+    def do_eddsa_test_to_openssl(self, curve):
+        if os.path.isdir("t"):
+            shutil.rmtree("t")
+        os.mkdir("t")
+
+        sk = SigningKey.generate(curve=curve)
+        vk = sk.get_verifying_key()
+
+        data = b"data"
+        with open("t/pubkey.der", "wb") as e:
+            e.write(vk.to_der())
+        with open("t/pubkey.pem", "wb") as e:
+            e.write(vk.to_pem())
+
+        sig = sk.sign(data)
+
+        with open("t/data.sig", "wb") as e:
+            e.write(sig)
+        with open("t/data.txt", "wb") as e:
+            e.write(data)
+        with open("t/baddata.txt", "wb") as e:
+            e.write(data + b"corrupt")
+
+        with self.assertRaises(SubprocessError):
+            run_openssl(
+                "pkeyutl -verify -pubin -inkey t/pubkey.pem -rawin "
+                "-in t/baddata.txt -sigfile t/data.sig"
+            )
+        run_openssl(
+            "pkeyutl -verify -pubin -inkey t/pubkey.pem -rawin "
+            "-in t/data.txt -sigfile t/data.sig"
+        )
+
+        shutil.rmtree("t")
+
+    # in practice at least OpenSSL 3.0.0 is needed to make EdDSA signatures
+    # earlier versions support EdDSA only in X.509 certificates
+    @pytest.mark.skipif(
+        "ed25519" not in OPENSSL_SUPPORTED_TYPES,
+        reason="system openssl does not support signing with Ed25519",
+    )
+    def test_to_openssl_ed25519(self):
+        return self.do_eddsa_test_to_openssl(Ed25519)
+
+    @pytest.mark.skipif(
+        "ed448" not in OPENSSL_SUPPORTED_TYPES,
+        reason="system openssl does not support signing with Ed448",
+    )
+    def test_to_openssl_ed448(self):
+        return self.do_eddsa_test_to_openssl(Ed448)
+
+    def do_eddsa_test_from_openssl(self, curve):
+        curvename = curve.name
+
+        if os.path.isdir("t"):
+            shutil.rmtree("t")
+        os.mkdir("t")
+
+        data = b"data"
+
+        run_openssl(
+            "genpkey -algorithm {0} -outform PEM -out t/privkey.pem".format(
+                curvename
+            )
+        )
+        run_openssl(
+            "pkey -outform PEM -pubout -in t/privkey.pem -out t/pubkey.pem"
+        )
+
+        with open("t/data.txt", "wb") as e:
+            e.write(data)
+        run_openssl(
+            "pkeyutl -sign -inkey t/privkey.pem "
+            "-rawin -in t/data.txt -out t/data.sig"
+        )
+
+        with open("t/data.sig", "rb") as e:
+            sig = e.read()
+        with open("t/pubkey.pem", "rb") as e:
+            vk = VerifyingKey.from_pem(e.read())
+
+        self.assertIs(vk.curve, curve)
+
+        vk.verify(sig, data)
+
+        shutil.rmtree("t")
+
+    @pytest.mark.skipif(
+        "ed25519" not in OPENSSL_SUPPORTED_TYPES,
+        reason="system openssl does not support signing with Ed25519",
+    )
+    def test_from_openssl_ed25519(self):
+        return self.do_eddsa_test_from_openssl(Ed25519)
+
+    @pytest.mark.skipif(
+        "ed448" not in OPENSSL_SUPPORTED_TYPES,
+        reason="system openssl does not support signing with Ed448",
+    )
+    def test_from_openssl_ed448(self):
+        return self.do_eddsa_test_from_openssl(Ed448)
+
 
 class TooSmallCurve(unittest.TestCase):
     OPENSSL_SUPPORTED_CURVES = set(
@@ -1470,13 +1672,13 @@ class Util(unittest.TestCase):
         for i in range(1000):
             seed = "seed-%d" % i
             for order in (
-                2 ** 8 - 2,
-                2 ** 8 - 1,
-                2 ** 8,
-                2 ** 8 + 1,
-                2 ** 8 + 2,
-                2 ** 16 - 1,
-                2 ** 16 + 1,
+                2**8 - 2,
+                2**8 - 1,
+                2**8,
+                2**8 + 1,
+                2**8 + 2,
+                2**16 - 1,
+                2**16 + 1,
             ):
                 n = tta(seed, order)
                 self.assertTrue(1 <= n < order, (1, n, order))
@@ -1488,7 +1690,7 @@ class Util(unittest.TestCase):
 
     def test_trytryagain_single(self):
         tta = util.randrange_from_seed__trytryagain
-        order = 2 ** 8 - 2
+        order = 2**8 - 2
         seed = b"text"
         n = tta(seed, order)
         # known issue: https://github.com/warner/python-ecdsa/issues/221
@@ -1497,24 +1699,24 @@ class Util(unittest.TestCase):
         else:
             self.assertEqual(n, 18)
 
-    @given(st.integers(min_value=0, max_value=10 ** 200))
+    @given(st.integers(min_value=0, max_value=10**200))
     def test_randrange(self, i):
         # util.randrange does not provide long-term stability: we might
         # change the algorithm in the future.
         entropy = util.PRNG("seed-%d" % i)
         for order in (
-            2 ** 8 - 2,
-            2 ** 8 - 1,
-            2 ** 8,
-            2 ** 16 - 1,
-            2 ** 16 + 1,
+            2**8 - 2,
+            2**8 - 1,
+            2**8,
+            2**16 - 1,
+            2**16 + 1,
         ):
             # that oddball 2**16+1 takes half our runtime
             n = util.randrange(order, entropy=entropy)
             self.assertTrue(1 <= n < order, (1, n, order))
 
     def OFF_test_prove_uniformity(self):  # pragma: no cover
-        order = 2 ** 8 - 2
+        order = 2**8 - 2
         counts = dict([(i, 0) for i in range(1, order)])
         assert 0 not in counts
         assert order not in counts
@@ -1540,8 +1742,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=SECP256k1.generator,
             secexp=int("9d0219792467d7d37b4d43298a7d0c05", 16),
-            hsh=sha256(b("sample")).digest(),
-            hash_func=sha256,
+            hsh=hashlib.sha256(b("sample")).digest(),
+            hash_func=hashlib.sha256,
             expected=int(
                 "8fa1f95d514760e498f28957b824ee6ec39ed64826ff4fecc2b5739ec45b91cd",
                 16,
@@ -1555,8 +1757,8 @@ class RFC6979(unittest.TestCase):
                 "cca9fbcc1b41e5a95d369eaa6ddcff73b61a4efaa279cfc6567e8daa39cbaf50",
                 16,
             ),
-            hsh=sha256(b("sample")).digest(),
-            hash_func=sha256,
+            hsh=hashlib.sha256(b("sample")).digest(),
+            hash_func=hashlib.sha256,
             expected=int(
                 "2df40ca70e639d89528a6b670d9d48d9165fdc0febc0974056bdce192b8e16a3",
                 16,
@@ -1567,8 +1769,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=SECP256k1.generator,
             secexp=0x1,
-            hsh=sha256(b("Satoshi Nakamoto")).digest(),
-            hash_func=sha256,
+            hsh=hashlib.sha256(b("Satoshi Nakamoto")).digest(),
+            hash_func=hashlib.sha256,
             expected=0x8F8A276C19F4149656B280621E358CCE24F5F52542772691EE69063B74F15D15,
         )
 
@@ -1576,12 +1778,12 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=SECP256k1.generator,
             secexp=0x1,
-            hsh=sha256(
+            hsh=hashlib.sha256(
                 b(
                     "All those moments will be lost in time, like tears in rain. Time to die..."
                 )
             ).digest(),
-            hash_func=sha256,
+            hash_func=hashlib.sha256,
             expected=0x38AA22D72376B4DBC472E06C3BA403EE0A394DA63FC58D88686C611ABA98D6B3,
         )
 
@@ -1589,8 +1791,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=SECP256k1.generator,
             secexp=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140,
-            hsh=sha256(b("Satoshi Nakamoto")).digest(),
-            hash_func=sha256,
+            hsh=hashlib.sha256(b("Satoshi Nakamoto")).digest(),
+            hash_func=hashlib.sha256,
             expected=0x33A19B60E25FB6F4435AF53A3D42D493644827367E6453928554F43E49AA6F90,
         )
 
@@ -1598,8 +1800,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=SECP256k1.generator,
             secexp=0xF8B8AF8CE3C7CCA5E300D33939540C10D45CE001B8F252BFBC57BA0342904181,
-            hsh=sha256(b("Alan Turing")).digest(),
-            hash_func=sha256,
+            hsh=hashlib.sha256(b("Alan Turing")).digest(),
+            hash_func=hashlib.sha256,
             expected=0x525A82B70E67874398067543FD84C83D30C175FDC45FDEEE082FE13B1D7CFDF1,
         )
 
@@ -1618,7 +1820,7 @@ class RFC6979(unittest.TestCase):
                     "AF2BDBE1AA9B6EC1E2ADE1D694F41FC71A831D0268E9891562113D8A62ADD1BF"
                 )
             ),
-            hash_func=sha256,
+            hash_func=hashlib.sha256,
             expected=int("23AF4074C90A02B3FE61D286D5C87F425E6BDD81B", 16),
         )
 
@@ -1626,8 +1828,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=NIST192p.generator,
             secexp=int("6FAB034934E4C0FC9AE67F5B5659A9D7D1FEFD187EE09FD4", 16),
-            hsh=sha1(b("sample")).digest(),
-            hash_func=sha1,
+            hsh=hashlib.sha1(b("sample")).digest(),
+            hash_func=hashlib.sha1,
             expected=int(
                 "37D7CA00D2C7B0E5E412AC03BD44BA837FDD5B28CD3B0021", 16
             ),
@@ -1637,8 +1839,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=NIST192p.generator,
             secexp=int("6FAB034934E4C0FC9AE67F5B5659A9D7D1FEFD187EE09FD4", 16),
-            hsh=sha256(b("sample")).digest(),
-            hash_func=sha256,
+            hsh=hashlib.sha256(b("sample")).digest(),
+            hash_func=hashlib.sha256,
             expected=int(
                 "32B1B6D7D42A05CB449065727A84804FB1A3E34D8F261496", 16
             ),
@@ -1648,8 +1850,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=NIST192p.generator,
             secexp=int("6FAB034934E4C0FC9AE67F5B5659A9D7D1FEFD187EE09FD4", 16),
-            hsh=sha512(b("sample")).digest(),
-            hash_func=sha512,
+            hsh=hashlib.sha512(b("sample")).digest(),
+            hash_func=hashlib.sha512,
             expected=int(
                 "A2AC7AB055E4F20692D49209544C203A7D1F2C0BFBC75DB1", 16
             ),
@@ -1659,8 +1861,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=NIST192p.generator,
             secexp=int("6FAB034934E4C0FC9AE67F5B5659A9D7D1FEFD187EE09FD4", 16),
-            hsh=sha1(b("test")).digest(),
-            hash_func=sha1,
+            hsh=hashlib.sha1(b("test")).digest(),
+            hash_func=hashlib.sha1,
             expected=int(
                 "D9CF9C3D3297D3260773A1DA7418DB5537AB8DD93DE7FA25", 16
             ),
@@ -1670,8 +1872,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=NIST192p.generator,
             secexp=int("6FAB034934E4C0FC9AE67F5B5659A9D7D1FEFD187EE09FD4", 16),
-            hsh=sha256(b("test")).digest(),
-            hash_func=sha256,
+            hsh=hashlib.sha256(b("test")).digest(),
+            hash_func=hashlib.sha256,
             expected=int(
                 "5C4CE89CF56D9E7C77C8585339B006B97B5F0680B4306C6C", 16
             ),
@@ -1681,8 +1883,8 @@ class RFC6979(unittest.TestCase):
         self._do(
             generator=NIST192p.generator,
             secexp=int("6FAB034934E4C0FC9AE67F5B5659A9D7D1FEFD187EE09FD4", 16),
-            hsh=sha512(b("test")).digest(),
-            hash_func=sha512,
+            hsh=hashlib.sha512(b("test")).digest(),
+            hash_func=hashlib.sha512,
             expected=int(
                 "0758753A5254759C7CFBAD2E2D9B0792EEE44136C9480527", 16
             ),
@@ -1695,8 +1897,8 @@ class RFC6979(unittest.TestCase):
                 "0FAD06DAA62BA3B25D2FB40133DA757205DE67F5BB0018FEE8C86E1B68C7E75CAA896EB32F1F47C70855836A6D16FCC1466F6D8FBEC67DB89EC0C08B0E996B83538",
                 16,
             ),
-            hsh=sha1(b("sample")).digest(),
-            hash_func=sha1,
+            hsh=hashlib.sha1(b("sample")).digest(),
+            hash_func=hashlib.sha1,
             expected=int(
                 "089C071B419E1C2820962321787258469511958E80582E95D8378E0C2CCDB3CB42BEDE42F50E3FA3C71F5A76724281D31D9C89F0F91FC1BE4918DB1C03A5838D0F9",
                 16,
@@ -1710,8 +1912,8 @@ class RFC6979(unittest.TestCase):
                 "0FAD06DAA62BA3B25D2FB40133DA757205DE67F5BB0018FEE8C86E1B68C7E75CAA896EB32F1F47C70855836A6D16FCC1466F6D8FBEC67DB89EC0C08B0E996B83538",
                 16,
             ),
-            hsh=sha256(b("sample")).digest(),
-            hash_func=sha256,
+            hsh=hashlib.sha256(b("sample")).digest(),
+            hash_func=hashlib.sha256,
             expected=int(
                 "0EDF38AFCAAECAB4383358B34D67C9F2216C8382AAEA44A3DAD5FDC9C32575761793FEF24EB0FC276DFC4F6E3EC476752F043CF01415387470BCBD8678ED2C7E1A0",
                 16,
@@ -1725,8 +1927,8 @@ class RFC6979(unittest.TestCase):
                 "0FAD06DAA62BA3B25D2FB40133DA757205DE67F5BB0018FEE8C86E1B68C7E75CAA896EB32F1F47C70855836A6D16FCC1466F6D8FBEC67DB89EC0C08B0E996B83538",
                 16,
             ),
-            hsh=sha512(b("test")).digest(),
-            hash_func=sha512,
+            hsh=hashlib.sha512(b("test")).digest(),
+            hash_func=hashlib.sha512,
             expected=int(
                 "16200813020EC986863BEDFC1B121F605C1215645018AEA1A7B215A564DE9EB1B38A67AA1128B80CE391C4FB71187654AAA3431027BFC7F395766CA988C964DC56D",
                 16,
@@ -2090,7 +2292,7 @@ class RFC7027(ECDH):
             "6FC98BD7E50211A4A27102FA3549DF79EBCB4BF246B80945CDDFE7D509BBFD7D",
             "9E56F509196784D963D1C0A401510EE7ADA3DCC5DEE04B154BF61AF1D5A6DECE",
             b"abc",
-            sha256,
+            hashlib.sha256,
             "CB28E0999B9C7715FD0A80D8E47A77079716CBBF917DD72E97566EA1C066957C",
             "86FA3BB4E26CAD5BF90B7F81899256CE7594BB1EA0C89212748BFF3B3D5B0315",
             NIST256p,
@@ -2106,7 +2308,7 @@ class RFC7027(ECDH):
             "B4B74E44D71A13D568003D7489908D564C7761E229C58CBFA18950096EB7463B"
             "854D7FA992F934D927376285E63414FA",
             b"abc",
-            sha384,
+            hashlib.sha384,
             "FB017B914E29149432D8BAC29A514640B46F53DDAB2C69948084E2930F1C8F7E"
             "08E07C9C63F2D21A07DCB56A6AF56EB3",
             "B263A1305E057F984D38726A1B46874109F417BCA112674C528262A40A629AF1"
@@ -2128,7 +2330,7 @@ class RFC7027(ECDH):
             "373778F9DE6B6497B1EF825FF24F42F9B4A4BD7382CFC3378A540B1B7F0C1B95"
             "6C2F",
             b"abc",
-            sha512,
+            hashlib.sha512,
             "0154FD3836AF92D0DCA57DD5341D3053988534FDE8318FC6AAAAB68E2E6F4339"
             "B19F2F281A7E0B22C269D93CF8794A9278880ED7DBB8D9362CAEACEE54432055"
             "2251",

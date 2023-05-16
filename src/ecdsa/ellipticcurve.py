@@ -56,7 +56,10 @@ from .util import orderlen, string_to_number, number_to_string
 
 @python_2_unicode_compatible
 class CurveFp(object):
-    """Short Weierstrass Elliptic Curve over a prime field."""
+    """
+    :term:`Short Weierstrass Elliptic Curve <short Weierstrass curve>` over a
+    prime field.
+    """
 
     if GMPY:  # pragma: no branch
 
@@ -217,7 +220,10 @@ class CurveEdTw(object):
 
     def __str__(self):
         return "CurveEdTw(p={0}, a={1}, d={2}, h={3})".format(
-            self.__p, self.__a, self.__d, self.__h,
+            self.__p,
+            self.__a,
+            self.__d,
+            self.__h,
         )
 
 
@@ -257,7 +263,7 @@ class AbstractPoint(object):
         alpha = (pow(x, 3, p) + (curve.a() * x) + curve.b()) % p
         try:
             beta = numbertheory.square_root_mod_prime(alpha, p)
-        except numbertheory.SquareRootError as e:
+        except numbertheory.Error as e:
             raise MalformedPointError(
                 "Encoding does not correspond to a point on curve", e
             )
@@ -312,7 +318,7 @@ class AbstractPoint(object):
 
         try:
             x = numbertheory.square_root_mod_prime(x2, p)
-        except numbertheory.SquareRootError as e:
+        except numbertheory.Error as e:
             raise MalformedPointError(
                 "Encoding does not correspond to a point on curve", e
             )
@@ -339,7 +345,7 @@ class AbstractPoint(object):
         :param data: single point encoding of the public key
         :type data: :term:`bytes-like object`
         :param curve: the curve on which the public key is expected to lay
-        :type curve: ecdsa.ellipticcurve.CurveFp
+        :type curve: ~ecdsa.ellipticcurve.CurveFp
         :param validate_encoding: whether to verify that the encoding of the
             point is self-consistent, defaults to True, has effect only
             on ``hybrid`` encoding
@@ -350,8 +356,8 @@ class AbstractPoint(object):
             name). All formats by default (specified with ``None``).
         :type valid_encodings: :term:`set-like object`
 
-        :raises MalformedPointError: if the public point does not lay on the
-            curve or the encoding is invalid
+        :raises `~ecdsa.errors.MalformedPointError`: if the public point does
+            not lay on the curve or the encoding is invalid
 
         :return: x and y coordinates of the encoded point
         :rtype: tuple(int, int)
@@ -544,7 +550,7 @@ class PointJacobi(AbstractPoint):
         :param data: single point encoding of the public key
         :type data: :term:`bytes-like object`
         :param curve: the curve on which the public key is expected to lay
-        :type curve: ecdsa.ellipticcurve.CurveFp
+        :type curve: ~ecdsa.ellipticcurve.CurveFp
         :param validate_encoding: whether to verify that the encoding of the
             point is self-consistent, defaults to True, has effect only
             on ``hybrid`` encoding
@@ -560,8 +566,8 @@ class PointJacobi(AbstractPoint):
             such, it will be commonly used with scalar multiplication. This
             will cause to precompute multiplication table generation for it
 
-        :raises MalformedPointError: if the public point does not lay on the
-            curve or the encoding is invalid
+        :raises `~ecdsa.errors.MalformedPointError`: if the public point does
+            not lay on the curve or the encoding is invalid
 
         :return: Point on curve
         :rtype: PointJacobi
@@ -665,7 +671,7 @@ class PointJacobi(AbstractPoint):
             return x
         p = self.__curve.p()
         z = numbertheory.inverse_mod(z, p)
-        return x * z ** 2 % p
+        return x * z**2 % p
 
     def y(self):
         """
@@ -681,7 +687,7 @@ class PointJacobi(AbstractPoint):
             return y
         p = self.__curve.p()
         z = numbertheory.inverse_mod(z, p)
-        return y * z ** 3 % p
+        return y * z**3 % p
 
     def scale(self):
         """
@@ -800,7 +806,7 @@ class PointJacobi(AbstractPoint):
         if not H and not r:
             return self._double_with_z_1(X1, Y1, p, self.__curve.a())
         V = X1 * I
-        X3 = (r ** 2 - J - 2 * V) % p
+        X3 = (r**2 - J - 2 * V) % p
         Y3 = (r * (V - X3) - 2 * Y1 * J) % p
         Z3 = 2 * H % p
         return X3, Y3, Z3
@@ -1107,7 +1113,7 @@ class Point(AbstractPoint):
         :param data: single point encoding of the public key
         :type data: :term:`bytes-like object`
         :param curve: the curve on which the public key is expected to lay
-        :type curve: ecdsa.ellipticcurve.CurveFp
+        :type curve: ~ecdsa.ellipticcurve.CurveFp
         :param validate_encoding: whether to verify that the encoding of the
             point is self-consistent, defaults to True, has effect only
             on ``hybrid`` encoding
@@ -1120,8 +1126,8 @@ class Point(AbstractPoint):
         :param int order: the point order, must be non zero when using
             generator=True
 
-        :raises MalformedPointError: if the public point does not lay on the
-            curve or the encoding is invalid
+        :raises `~ecdsa.errors.MalformedPointError`: if the public point does
+            not lay on the curve or the encoding is invalid
 
         :return: Point on curve
         :rtype: Point
@@ -1317,8 +1323,8 @@ class PointEdwards(AbstractPoint):
             this will cause the library to pre-compute some values to
             make repeated usages of the point much faster
 
-        :raises MalformedPointError: if the public point does not lay on the
-            curve or the encoding is invalid
+        :raises `~ecdsa.errors.MalformedPointError`: if the public point does
+            not lay on the curve or the encoding is invalid
 
         :return: Initialised point on an Edwards curve
         :rtype: PointEdwards
